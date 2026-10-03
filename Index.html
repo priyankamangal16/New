@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer insight generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Serif:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F5F7F8;
+    --card: #FFFFFF;
+    --ink: #16222B;
+    --ink-2: #4B5A66;
+    --line: #DCE3E8;
+    --pos: #2E8B63;
+    --neu: #94A1AC;
+    --neg: #C23B52;
+    --accent: #0D6E78;
+    --accent-bg: #E3F2F3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.55;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-family: "IBM Plex Serif", Georgia, serif; font-weight: 500; font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-family: "IBM Plex Serif", Georgia, serif; font-weight: 500; font-size: 19px; margin: 32px 0 12px; }
+  .lede { color: var(--ink-2); margin: 0 0 24px; max-width: 56ch; }
+  label { display: block; font-size: 14px; color: var(--ink-2); margin-bottom: 6px; }
+  textarea {
+    width: 100%; min-height: 200px; padding: 12px 14px; font: inherit; font-size: 15px;
+    color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 6px; resize: vertical;
+  }
+  textarea:focus, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint { font-size: 13px; color: var(--ink-2); margin: 6px 0 0; }
+  .row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; font-weight: 500; cursor: pointer; border-radius: 6px; padding: 11px 18px; min-height: 44px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:hover { border-color: var(--ink-2); }
+  button.primary:hover { background: #0A5A63; }
+  button:disabled { opacity: .6; cursor: wait; }
+  .err { color: var(--neg); font-size: 14px; margin-top: 10px; min-height: 1em; }
+  #results { display: none; }
+  .summary { font-size: 17px; margin: 0 0 20px; max-width: 60ch; }
+  .strip { display: flex; height: 36px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: var(--card); }
+  .strip div { display: flex; align-items: center; padding-left: 10px; font-size: 13px; font-weight: 500; color: #fff; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin-top: 8px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; }
+  .item-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .item-title { font-weight: 500; }
+  .count { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+  .quote { font-size: 14px; color: var(--ink-2); margin: 6px 0 0; padding-left: 10px; border-left: 3px solid var(--line); }
+  .item p { margin: 6px 0 0; font-size: 15px; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 10px; }
+  .bar span { display: block; height: 100%; border-radius: 2px; }
+  .urgent { border-left: 4px solid var(--neg); }
+  .tag { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 4px; background: var(--accent-bg); color: #08474E; white-space: nowrap; }
+  .tag.high { background: #F9E1E5; color: #7B1F2F; }
+  .tag.medium { background: #FBF0D5; color: #6B4A06; }
+  .opps { padding-left: 20px; margin: 0; }
+  .opps li { margin-bottom: 6px; }
+  .empty { color: var(--ink-2); font-size: 15px; }
+  @media (prefers-reduced-motion: no-preference) { #results.show { animation: fade .25s ease-out; } @keyframes fade { from { opacity: 0 } to { opacity: 1 } } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Customer insight generator</h1>
+  <p class="lede">Paste customer inquiries, reviews, or support messages. Get sentiment, recurring themes, urgent cases, and next steps.</p>
+
+  <label for="input">Customer messages</label>
+  <textarea id="input" placeholder="Paste one message per line, or separate messages with a blank line."></textarea>
+  <p class="hint" id="count">0 messages</p>
+
+  <div class="row">
+    <button class="primary" id="go">Generate insights</button>
+    <button id="sample">Load sample data</button>
+    <button id="clear">Clear</button>
+  </div>
+  <div class="err" id="err" role="alert"></div>
+
+  <section id="results" aria-live="polite">
+    <h2>Overview</h2>
+    <p class="summary" id="summary"></p>
+    <div class="strip" id="strip" role="img" aria-label="Sentiment distribution"></div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--pos)"></span>Positive</span>
+      <span><span class="dot" style="background:var(--neu)"></span>Neutral</span>
+      <span><span class="dot" style="background:var(--neg)"></span>Negative</span>
+    </div>
+
+    <h2>Recurring themes</h2>
+    <div id="themes"></div>
+
+    <h2>Needs attention now</h2>
+    <div id="urgent"></div>
+
+    <h2>Recommended actions</h2>
+    <div id="actions"></div>
+
+    <h2>Opportunities</h2>
+    <ul class="opps" id="opps"></ul>
+
+    <div class="row"><button id="copy">Copy report</button></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const SAMPLE = [
+  "I've been waiting 9 days for my order and tracking hasn't updated. Need this for a gift on Friday.",
+  "Love the new app design, so much easier to find my past orders. Thank you!",
+  "Was charged twice for the same subscription this month. Please refund the duplicate ASAP.",
+  "Support chat took 40 minutes to respond. The agent was kind but I almost gave up.",
+  "Do you offer bulk pricing for 200+ units? We're a school district looking to order in January.",
+  "The zipper broke after two weeks. Disappointed, the quality used to be better.",
+  "Shipping was fast and packaging was lovely. Will order again.",
+  "Can't log in since the last update. Password reset emails never arrive.",
+  "Would be great if you added a dark mode and a wishlist feature.",
+  "Where can I find the return policy? Couldn't see it at checkout."
+].join("\n\n");
+
+function parse() {
+  return $('input').value.split(/\n\s*\n|\r\n\s*\r\n/).flatMap(b => b.trim() ? [b.trim()] : []).flatMap(b => b.split("\n").length > 1 && !/\n\s*\n/.test(b) && b.split("\n").every(l => l.trim().length < 400) ? b.split("\n").map(l => l.trim()).filter(Boolean) : [b]);
+}
+function updateCount() { const n = parse().length; $('count').textContent = n + (n === 1 ? ' message' : ' messages'); }
+$('input').addEventListener('input', updateCount);
+$('sample').onclick = () => { $('input').value = SAMPLE; updateCount(); $('err').textContent = ''; };
+$('clear').onclick = () => { $('input').value = ''; updateCount(); $('results').className = ''; $('results').style.display = 'none'; $('err').textContent = ''; };
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+const COLORS = { positive: 'var(--pos)', neutral: 'var(--neu)', negative: 'var(--neg)' };
+
+let lastReport = '';
+
+function render(d) {
+  $('summary').textContent = d.summary || '';
+
+  const s = d.sentiment || {}, p = +s.positive || 0, n = +s.neutral || 0, g = +s.negative || 0, total = p + n + g || 1;
+  const strip = $('strip'); strip.innerHTML = '';
+  [['positive', p], ['neutral', n], ['negative', g]].forEach(([k, v]) => {
+    if (!v) return;
+    const seg = el('div', '', Math.round(v / total * 100) + '%');
+    seg.style.width = (v / total * 100) + '%'; seg.style.background = COLORS[k];
+    strip.appendChild(seg);
+  });
+
+  const themes = $('themes'); themes.innerHTML = '';
+  const max = Math.max(1, ...(d.themes || []).map(t => +t.count || 0));
+  (d.themes || []).forEach(t => {
+    const it = el('div', 'item'), h = el('div', 'item-head');
+    h.append(el('span', 'item-title', t.name), el('span', 'count', (t.count || 0) + (t.count === 1 ? ' mention' : ' mentions')));
+    it.appendChild(h);
+    if (t.example) it.appendChild(el('p', 'quote', t.example));
+    const bar = el('div', 'bar'), fill = el('span'); fill.style.width = ((+t.count || 0) / max * 100) + '%'; fill.style.background = COLORS[t.sentiment] || COLORS.neutral;
+    bar.appendChild(fill); it.appendChild(bar); themes.appendChild(it);
+  });
+
+  const urgent = $('urgent'); urgent.innerHTML = '';
+  if (!(d.urgent || []).length) urgent.appendChild(el('p', 'empty', 'No urgent cases found.'));
+  (d.urgent || []).forEach(u => {
+    const it = el('div', 'item urgent'); it.appendChild(el('div', 'item-title', u.reason));
+    if (u.excerpt) it.appendChild(el('p', 'quote', u.excerpt));
+    urgent.appendChild(it);
+  });
+
+  const actions = $('actions'); actions.innerHTML = '';
+  (d.actions || []).forEach(a => {
+    const it = el('div', 'item'), h = el('div', 'item-head');
+    h.append(el('span', 'item-title', a.title), el('span', 'tag ' + (a.priority || ''), (a.priority || 'low') + ' priority'));
+    it.appendChild(h); if (a.detail) it.appendChild(el('p', '', a.detail)); actions.appendChild(it);
+  });
+
+  const opps = $('opps'); opps.innerHTML = '';
+  (d.opportunities || []).forEach(o => opps.appendChild(el('li', '', o)));
+
+  lastReport = ['Customer insight report', '', d.summary, '',
+    'Sentiment: ' + p + ' positive, ' + n + ' neutral, ' + g + ' negative', '',
+    'Themes:', ...(d.themes || []).map(t => '- ' + t.name + ' (' + t.count + ')'), '',
+    'Urgent:', ...((d.urgent || []).map(u => '- ' + u.reason)), '',
+    'Actions:', ...(d.actions || []).map(a => '- [' + a.priority + '] ' + a.title + ': ' + a.detail), '',
+    'Opportunities:', ...(d.opportunities || []).map(o => '- ' + o)].join('\n');
+
+  const r = $('results'); r.style.display = 'block'; r.className = 'show';
+  r.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('go').onclick = async () => {
+  const msgs = parse();
+  if (!msgs.length) { $('err').textContent = 'Paste at least one customer message first.'; return; }
+  $('err').textContent = '';
+  const btn = $('go'); btn.disabled = true; btn.textContent = 'Analyzing…';
+  const system = 'You analyze customer messages for a business. Respond with ONLY valid JSON, no preamble and no markdown fences, matching exactly: {"summary": string (2-3 sentences, plain language), "sentiment": {"positive": int, "neutral": int, "negative": int} (counts of messages, must sum to the message count), "themes": [{"name": string (2-4 words), "count": int, "sentiment": "positive"|"neutral"|"negative", "example": string (short excerpt from a message)}] (max 6, sorted by count), "urgent": [{"reason": string, "excerpt": string}] (messages needing a fast response, such as billing errors, deadlines, lockouts, or churn risk; may be empty), "actions": [{"title": string, "detail": string (one sentence), "priority": "high"|"medium"|"low"}] (3-5 items), "opportunities": [string] (up to 4 feature or growth ideas hinted at by customers)}.';
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6", max_tokens: 1000, system,
+        messages: [{ role: "user", content: "Analyze these " + msgs.length + " customer messages:\n\n" + msgs.map((m, i) => (i + 1) + '. ' + m).join("\n") }]
+      })
+    });
+    if (!res.ok) throw new Error('Request failed (' + res.status + ')');
+    const data = await res.json();
+    const text = data.content.map(i => i.type === 'text' ? i.text : '').join('').replace(/```json|```/g, '').trim();
+    render(JSON.parse(text));
+  } catch (e) {
+    $('err').textContent = "Couldn't generate insights. Check your connection and try again.";
+  } finally {
+    btn.disabled = false; btn.textContent = 'Generate insights';
+  }
+};
+
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText(lastReport); $('copy').textContent = 'Copied'; }
+  catch (e) { $('copy').textContent = "Couldn't copy"; }
+  setTimeout(() => $('copy').textContent = 'Copy report', 1500);
+};
+</script>
+</body>
+</html>
